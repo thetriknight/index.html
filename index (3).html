@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Grind Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0B0D11; --panel:#12151B; --panel-2:#181C24; --line: rgba(255,255,255,0.08);
+    --text:#E8E9EC; --text-dim:#868C9C;
+    --daily:#8B7CF6; --opp:#4ADE80; --tech:#5EA8F2; --trade:#F2C14E; --infra:#4ECDC4; --side:#F27EB0;
+    --danger:#E8615A;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:-apple-system,Inter,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:60px;}
+  .wrap{max-width:1240px; margin:0 auto; padding:26px 20px;}
+  h1{font-size:22px; font-weight:700;}
+  .mono{font-family:monospace;}
+  a{color:inherit;}
+  input, select, textarea{background:var(--panel); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:9px 12px; font-size:14px; outline:none;}
+  .btn{display:inline-flex; align-items:center; gap:6px; border:none; border-radius:6px; padding:10px 18px; font-weight:600; font-size:14px; cursor:pointer; color:#0B0D11;}
+  .btn-ghost{background:transparent; border:1px solid var(--line); color:var(--text);}
+  .btn-danger{background:var(--danger); color:#fff;}
+  .btn-sm{padding:6px 12px; font-size:12.5px; border-radius:5px;}
+
+  /* login */
+  #loginScreen{max-width:360px; margin:100px auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:32px;}
+  #loginScreen h1{margin-bottom:20px;}
+  #loginScreen .field{margin-bottom:14px;}
+  #loginScreen input{width:100%;}
+  #loginError{color:var(--danger); font-size:13px; margin-top:10px; display:none;}
+
+  #app{display:none;}
+  .masthead{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:22px; gap:16px; flex-wrap:wrap;}
+  .masthead .eyebrow{font-family:monospace; font-size:11.5px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim);}
+  .masthead .sub{color:var(--text-dim); font-size:14px; margin-top:6px;}
+
+  .stat-row{display:flex; gap:10px; flex-wrap:wrap; margin:20px 0 26px;}
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 16px; min-width:110px;}
+  .stat .n{font-size:21px; font-weight:700;}
+  .stat .l{font-size:10.5px; color:var(--text-dim); text-transform:uppercase;}
+
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin-bottom:22px;}
+  .tab{font-family:monospace; font-size:12.5px; padding:10px 16px; border-radius:8px 8px 0 0; cursor:pointer; color:var(--text-dim); border:1px solid transparent; border-bottom:none; display:flex; align-items:center; gap:7px;}
+  .tab.active{background:var(--panel); color:var(--text); border-color:var(--line);}
+  .tab .dot{width:7px; height:7px; border-radius:50%;}
+
+  .toolbar{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px; justify-content:space-between;}
+  #search{min-width:200px; flex:1; max-width:260px;}
+
+  table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  thead th{text-align:left; font-family:monospace; font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); padding:11px 13px; border-bottom:1px solid var(--line); background:var(--panel-2);}
+  tbody td{padding:12px 13px; border-bottom:1px solid var(--line); font-size:13.5px; vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  .cell-primary{font-weight:600;}
+  .tag{font-family:monospace; font-size:10.5px; padding:3px 9px; border-radius:999px; background:rgba(255,255,255,0.06); color:var(--text-dim); display:inline-block;}
+  .notes-cell{max-width:200px; color:var(--text-dim); font-size:12.5px;}
+  .row-actions{display:flex; gap:6px;}
+  .empty{padding:56px 20px; text-align:center; color:var(--text-dim);}
+
+  .overlay{display:none; position:fixed; inset:0; background:rgba(4,5,7,0.65); align-items:flex-start; justify-content:center; z-index:100; padding:40px 20px; overflow-y:auto;}
+  .overlay.show{display:flex;}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:12px; width:100%; max-width:520px; padding:26px; margin-bottom:40px;}
+  .modal h2{font-size:18px; margin-bottom:18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase;}
+  .field input, .field select, .field textarea{width:100%;}
+  .field textarea{resize:vertical; min-height:56px;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:20px;}
+
+  .review-card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px 22px; margin-bottom:14px;}
+  .review-card .rdate{font-family:monospace; font-size:12px; color:var(--text-dim); margin-bottom:12px;}
+  .review-qa{margin-bottom:10px;}
+  .review-qa .q{font-size:11px; color:var(--text-dim); text-transform:uppercase; margin-bottom:3px;}
+  .review-qa .a{font-size:14px; white-space:pre-wrap;}
+
+  @media(max-width:860px){
+    table, thead, tbody, th, td, tr{display:block;}
+    thead{display:none;}
+    tbody tr{border:1px solid var(--line); border-radius:10px; margin-bottom:12px; background:var(--panel);}
+    tbody td{border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:12px; text-align:right;}
+    tbody td::before{content:attr(data-label); font-family:monospace; font-size:10px; text-transform:uppercase; color:var(--text-dim); text-align:left;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== SET THESE FROM SUPABASE PROJECT SETTINGS > API (same project as your CRM works fine) ====== -->
+<script>
+  const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+</script>
+
+<div id="loginScreen">
+  <h1>THE GRIND TRACKER</h1>
+  <div class="field"><input type="text" id="loginEmail" placeholder="Email"></div>
+  <div class="field"><input type="password" id="loginPassword" placeholder="Password"></div>
+  <button class="btn" id="loginBtn" style="width:100%; justify-content:center; background:#8B7CF6;">Log In</button>
+  <div id="loginError"></div>
+</div>
+
+<div id="app">
+  <div class="wrap">
+    <div class="masthead">
+      <div>
+        <div class="eyebrow">Personal Operating System</div>
+        <h1>THE GRIND TRACKER</h1>
+        <div class="sub">Discipline · Income · Skills · Capital · Knowledge · Network — compounding into DSPACE.</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn">Log Out</button>
+    </div>
+
+    <div class="stat-row" id="statRow"></div>
+    <div class="tabs" id="tabs"></div>
+
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search this section…">
+      <button class="btn" id="addBtn" style="background:var(--daily);">+ Add Entry</button>
+    </div>
+
+    <div id="tableHolder"></div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">Add Entry</h2>
+    <input type="hidden" id="editId">
+    <div id="formFields"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
+      <button class="btn" id="saveBtn" style="background:var(--daily);">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SECTIONS = {
+  daily: {
+    label: 'Daily Operations', color: 'var(--daily)', table: 'daily_operations',
+    fields: [
+      {key:'task', label:'Task', type:'text', required:true},
+      {key:'date', label:'Date', type:'date'},
+      {key:'status', label:'Status', type:'select', options:['Not Started','In Progress','Done']},
+      {key:'priority', label:'Priority', type:'select', options:['Low','Medium','High']},
+      {key:'category', label:'Category', type:'select', options:['Discipline','Income','Skills','Capital','Knowledge','Network']},
+      {key:'skillsWorkedOn', label:'Skills Worked On', type:'text'},
+      {key:'researchDone', label:'Research Done', type:'text'},
+      {key:'opportunityWorkedOn', label:'Opportunity Worked On', type:'text'},
+      {key:'sideRoleWorkedOn', label:'Side Role Worked On', type:'text'},
+      {key:'tradingSession', label:'Trading Session', type:'text'},
+      {key:'executionScore', label:'Execution Score (1-10)', type:'number'},
+      {key:'notes', label:'Notes', type:'textarea'},
+    ],
+    columns: ['task','category','status','priority','executionScore','notes']
+  },
+  opportunities: {
+    label: 'Opportunities / Jobs', color: 'var(--opp)', table: 'opportunities',
+    fields: [
+      {key:'role', label:'Role', type:'text', required:true},
+      {key:'type', label:'Type', type:'select', options:['Web2','Web3']},
+      {key:'company', label:'Company / Protocol', type:'text'},
+      {key:'status', label:'Status', type:'select', options:['Prospecting','Researching','Applied','Interview','Negotiation','Won','Lost','Dropped']},
+      {key:'appliedDate', label:'Applied Date', type:'date'},
+      {key:'followUpDate', label:'Follow-up Date', type:'date'},
+      {key:'skillGaps', label:'Skill Gaps Identified', type:'textarea'},
+      {key:'requiredSkills', label:'Required Skills', type:'text'},
+      {key:'supportingFieldWork', label:'Supporting Field Work', type:'text'},
+      {key:'executionActivity', label:'Execution Activity', type:'text'},
+      {key:'notes', label:'Notes', type:'textarea'},
+    ],
+    columns: ['role','company','type','status','followUpDate','notes']
+  },
+  technical: {
+    label: 'Technical Progress', color: 'var(--tech)', table: 'technical_progress',
+    fields: [
+      {key:'skill', label:'Skill', type:'text', required:true},
+      {key:'category', label:'Category', type:'select', options:['Smart Contracts','Solidity','Backend','Frontend','Blockchain','Systems Design','Infrastructure','Tokenomics','AI','Research','Technical Writing']},
+      {key:'currentLevel', label:'Current Level', type:'select', options:['Beginner','Intermediate','Advanced']},
+      {key:'targetLevel', label:'Target Level', type:'select', options:['Beginner','Intermediate','Advanced','Expert']},
+      {key:'resources', label:'Resources', type:'textarea'},
+      {key:'projectsBuilt', label:'Projects Built', type:'text'},
+      {key:'lastPracticed', label:'Last Practiced', type:'date'},
+      {key:'nextAction', label:'Next Action', type:'text'},
+      {key:'linkedExecution', label:'Linked Daily Execution', type:'text'},
+    ],
+    columns: ['skill','category','currentLevel','targetLevel','nextAction','lastPracticed']
+  },
+  trading: {
+    label: 'Trading', color: 'var(--trade)', table: 'trading',
+    fields: [
+      {key:'trade', label:'Trade / Pair', type:'text', required:true},
+      {key:'date', label:'Date', type:'date'},
+      {key:'asset', label:'Asset', type:'text'},
+      {key:'direction', label:'Direction', type:'select', options:['Long','Short']},
+      {key:'setupType', label:'Setup Type', type:'text'},
+      {key:'entry', label:'Entry', type:'number'},
+      {key:'exit', label:'Exit', type:'number'},
+      {key:'riskPercent', label:'Risk %', type:'number'},
+      {key:'resultPercent', label:'Result %', type:'number'},
+      {key:'winLoss', label:'Win / Loss', type:'select', options:['Win','Loss','Breakeven']},
+      {key:'psychologyNotes', label:'Psychology Notes', type:'textarea'},
+      {key:'lessonsLearned', label:'Lessons Learned', type:'textarea'},
+      {key:'linkedExecution', label:'Linked Daily Execution', type:'text'},
+    ],
+    columns: ['trade','date','direction','resultPercent','winLoss','lessonsLearned']
+  },
+  infra: {
+    label: 'Infra Research', color: 'var(--infra)', table: 'infra_research',
+    fields: [
+      {key:'topic', label:'Topic', type:'text', required:true},
+      {key:'category', label:'Category', type:'select', options:['Ethereum','Modular Blockchains','Infrastructure','Governance','Tokenomics','AI','DeFi','Systems Design']},
+      {key:'source', label:'Source', type:'text'},
+      {key:'summary', label:'Summary', type:'textarea'},
+      {key:'insights', label:'Insights', type:'textarea'},
+      {key:'questions', label:'Questions', type:'textarea'},
+      {key:'applicationToDspace', label:'Application to DSPACE', type:'textarea'},
+      {key:'relatedExecution', label:'Related Daily Execution', type:'text'},
+    ],
+    columns: ['topic','category','source','insights','applicationToDspace']
+  },
+  side: {
+    label: 'Side Roles / Field Intel', color: 'var(--side)', table: 'side_roles',
+    fields: [
+      {key:'roleName', label:'Role Name', type:'text', required:true},
+      {key:'roleType', label:'Role Type', type:'select', options:['Moderator','Raider','Content Writer','Community Manager','Research Support','Ambassador','Growth Contributor']},
+      {key:'project', label:'Project', type:'text'},
+      {key:'platform', label:'Platform', type:'text'},
+      {key:'status', label:'Status', type:'select', options:['Active','Paused','Completed']},
+      {key:'startDate', label:'Start Date', type:'date'},
+      {key:'timeSpent', label:'Time Spent', type:'text'},
+      {key:'keyInsight', label:'Key Insight Learned', type:'textarea'},
+      {key:'proofLink', label:'Proof Link', type:'text'},
+      {key:'linkedOpportunity', label:'Linked Opportunity', type:'text'},
+      {key:'executionDay', label:'Execution Day', type:'date'},
+    ],
+    columns: ['roleName','project','roleType','status','keyInsight']
+  },
+  review: {
+    label: 'Weekly Review', color: '#B8BEC9', table: 'weekly_reviews',
+    fields: [
+      {key:'weekOf', label:'Week Of', type:'date', required:true},
+      {key:'built', label:'What did I build?', type:'textarea'},
+      {key:'learned', label:'What did I learn?', type:'textarea'},
+      {key:'opportunitiesMoved', label:'Which opportunities moved forward?', type:'textarea'},
+      {key:'skillsImproved', label:'Which skills improved?', type:'textarea'},
+      {key:'capitalBuilt', label:'What capital did I build?', type:'textarea'},
+      {key:'distractions', label:'What distracted me?', type:'textarea'},
+      {key:'systemsToImprove', label:'What systems need improvement?', type:'textarea'},
+      {key:'closerToDspace', label:'Did my actions move me closer to DSPACE?', type:'select', options:['Yes','Somewhat','No']},
+    ],
+    columns: null
+  }
+};
+
+let activeSection = 'daily';
+let dataStore = {};
+
+async function checkSession(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ showApp(); loadAll(); } else { showLogin(); }
+}
+function showLogin(){ document.getElementById('loginScreen').style.display='block'; document.getElementById('app').style.display='none'; }
+function showApp(){ document.getElementById('loginScreen').style.display='none'; document.getElementById('app').style.display='block'; }
+
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  const errEl = document.getElementById('loginError');
+  if(error){ errEl.textContent = error.message; errEl.style.display='block'; }
+  else { errEl.style.display='none'; showApp(); loadAll(); }
+});
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{ await sb.auth.signOut(); showLogin(); });
+
+async function loadSection(key){
+  const { data, error } = await sb.from(SECTIONS[key].table).select('*').order('created_at', {ascending:false});
+  dataStore[key] = error ? [] : data;
+}
+async function loadAll(){
+  for(const key of Object.keys(SECTIONS)){ await loadSection(key); }
+  renderTabs(); renderStats(); renderActiveSection();
+}
+
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent = s==null?'':String(s); return d.innerHTML; }
+
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = Object.entries(SECTIONS).map(([key, sec]) => `
+    <div class="tab ${key===activeSection?'active':''}" onclick="switchSection('${key}')">
+      <span class="dot" style="background:${sec.color};"></span>${sec.label}
+      <span class="mono" style="color:var(--text-dim); font-size:11px;">${dataStore[key] ? dataStore[key].length : 0}</span>
+    </div>
+  `).join('');
+}
+function switchSection(key){
+  activeSection = key;
+  document.getElementById('search').value = '';
+  renderTabs(); renderActiveSection();
+  const sec = SECTIONS[key];
+  document.getElementById('addBtn').style.background = sec.color;
+  document.getElementById('addBtn').textContent = key==='review' ? '+ Add Weekly Review' : '+ Add Entry';
+}
+
+function renderStats(){
+  const daily = dataStore.daily || [], opp = dataStore.opportunities || [];
+  const trading = dataStore.trading || [], side = dataStore.side || [];
+  const doneToday = daily.filter(d=>d.status==='Done').length;
+  const avgExec = daily.length ? (daily.reduce((s,d)=>s+(parseFloat(d.executionScore)||0),0)/daily.length).toFixed(1) : '0';
+  const activeOpp = opp.filter(o=>!['Won','Lost','Dropped'].includes(o.status)).length;
+  const trades = trading.length;
+  const wins = trading.filter(t=>t.winLoss==='Win').length;
+  const winRate = trades ? Math.round((wins/trades)*100) : 0;
+  const activeSides = side.filter(s=>s.status==='Active').length;
+  document.getElementById('statRow').innerHTML = `
+    <div class="stat"><div class="n">${doneToday}</div><div class="l">Tasks Done</div></div>
+    <div class="stat"><div class="n">${avgExec}</div><div class="l">Avg Execution</div></div>
+    <div class="stat"><div class="n">${activeOpp}</div><div class="l">Active Opportunities</div></div>
+    <div class="stat"><div class="n">${winRate}%</div><div class="l">Trade Win Rate (${trades})</div></div>
+    <div class="stat"><div class="n">${activeSides}</div><div class="l">Active Side Roles</div></div>
+  `;
+}
+
+function renderActiveSection(){
+  const sec = SECTIONS[activeSection];
+  const holder = document.getElementById('tableHolder');
+  const search = document.getElementById('search').value.toLowerCase();
+  let entries = dataStore[activeSection] || [];
+  if(search){ entries = entries.filter(e => Object.values(e).some(v => String(v||'').toLowerCase().includes(search))); }
+
+  if(activeSection === 'review'){ renderReviewCards(entries, holder); return; }
+
+  if(entries.length === 0){
+    holder.innerHTML = `<div class="empty">Nothing logged yet. Add your first ${sec.label.toLowerCase()} entry.</div>`;
+    return;
+  }
+
+  const cols = sec.columns;
+  const colLabels = cols.map(c => (sec.fields.find(f=>f.key===c)||{}).label || c);
+
+  holder.innerHTML = `
+    <table>
+      <thead><tr>${colLabels.map(l=>`<th>${l}</th>`).join('')}<th></th></tr></thead>
+      <tbody>
+        ${entries.map(e => `
+          <tr>
+            ${cols.map((c,i) => {
+              const field = sec.fields.find(f=>f.key===c);
+              const val = e[c]; const isFirst = i===0;
+              if(field && field.type==='textarea'){
+                const short = (val||'').slice(0,70);
+                return `<td data-label="${colLabels[i]}"><div class="notes-cell">${escapeHtml(short)}${(val||'').length>70?'…':''}</div></td>`;
+              }
+              if(field && field.type==='select'){
+                return `<td data-label="${colLabels[i]}">${val ? `<span class="tag">${escapeHtml(val)}</span>` : ''}</td>`;
+              }
+              return `<td data-label="${colLabels[i]}" class="${isFirst?'cell-primary':''}">${escapeHtml(val)}</td>`;
+            }).join('')}
+            <td data-label="">
+              <div class="row-actions">
+                <button class="btn btn-ghost btn-sm" onclick="openEdit('${e.id}')">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteEntry('${e.id}')">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderReviewCards(entries, holder){
+  if(entries.length === 0){ holder.innerHTML = `<div class="empty">No weekly reviews yet.</div>`; return; }
+  const sorted = [...entries].sort((a,b)=> (b.weekOf||'').localeCompare(a.weekOf||''));
+  holder.innerHTML = sorted.map(e => `
+    <div class="review-card">
+      <div class="rdate">Week of ${escapeHtml(e.weekOf)} ${e.closerToDspace ? `· <span class="tag">Closer to DSPACE: ${escapeHtml(e.closerToDspace)}</span>` : ''}</div>
+      ${SECTIONS.review.fields.filter(f=>f.type==='textarea').map(f => e[f.key] ? `
+        <div class="review-qa"><div class="q">${f.label}</div><div class="a">${escapeHtml(e[f.key])}</div></div>
+      ` : '').join('')}
+      <div class="row-actions" style="margin-top:12px;">
+        <button class="btn btn-ghost btn-sm" onclick="openEdit('${e.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteEntry('${e.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openAdd(){
+  document.getElementById('editId').value = '';
+  document.getElementById('modalTitle').textContent = activeSection==='review' ? 'Add Weekly Review' : 'Add Entry — ' + SECTIONS[activeSection].label;
+  buildForm({});
+  document.getElementById('overlay').classList.add('show');
+}
+function openEdit(id){
+  const entry = (dataStore[activeSection]||[]).find(e=>e.id===id);
+  if(!entry) return;
+  document.getElementById('editId').value = id;
+  document.getElementById('modalTitle').textContent = 'Edit — ' + SECTIONS[activeSection].label;
+  buildForm(entry);
+  document.getElementById('overlay').classList.add('show');
+}
+function buildForm(entry){
+  const sec = SECTIONS[activeSection];
+  document.getElementById('formFields').innerHTML = sec.fields.map(f => {
+    const val = entry[f.key] || '';
+    if(f.type === 'select'){
+      return `<div class="field"><label>${f.label}</label><select id="f-${f.key}">
+        <option value=""></option>${f.options.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')}
+      </select></div>`;
+    }
+    if(f.type === 'textarea'){
+      return `<div class="field"><label>${f.label}</label><textarea id="f-${f.key}">${escapeHtml(val)}</textarea></div>`;
+    }
+    return `<div class="field"><label>${f.label}</label><input type="${f.type}" id="f-${f.key}" value="${escapeHtml(val)}"></div>`;
+  }).join('');
+  document.getElementById('saveBtn').style.background = sec.color;
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
+
+async function saveEntry(){
+  const sec = SECTIONS[activeSection];
+  const id = document.getElementById('editId').value;
+  const data = {};
+  let missingRequired = false;
+  sec.fields.forEach(f => {
+    const el = document.getElementById('f-'+f.key);
+    let val = el ? el.value.trim() : '';
+    if(f.required && !val) missingRequired = true;
+    if(f.type === 'number') data[f.key] = val === '' ? null : parseFloat(val);
+    else if(f.type === 'date') data[f.key] = val === '' ? null : val;
+    else data[f.key] = val;
+  });
+  if(missingRequired){ alert('Please fill in the required field.'); return; }
+
+  if(id){ await sb.from(sec.table).update(data).eq('id', id); }
+  else { await sb.from(sec.table).insert(data); }
+
+  closeModal();
+  await loadSection(activeSection);
+  renderTabs(); renderStats(); renderActiveSection();
+}
+
+async function deleteEntry(id){
+  if(!confirm('Delete this entry? This cannot be undone.')) return;
+  await sb.from(SECTIONS[activeSection].table).delete().eq('id', id);
+  await loadSection(activeSection);
+  renderTabs(); renderStats(); renderActiveSection();
+}
+
+document.getElementById('addBtn').addEventListener('click', openAdd);
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+document.getElementById('saveBtn').addEventListener('click', saveEntry);
+document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
+document.getElementById('search').addEventListener('input', renderActiveSection);
+
+checkSession();
+</script>
+</body>
+</html>
